@@ -1,37 +1,20 @@
 """
-秀丽隐杆线虫 (C. elegans) LIF 神经模拟 + Ursina 3D 自由相机
-运行环境: Windows 11 + Python 3.12
-依赖安装: pip install ursina numpy
+C. elegans LIF neural simulation + Ursina 3D free camera
+Environment: Windows 11 + Python 3.12
+Install: pip install ursina numpy
 
-操作:
-    WASD        前后左右移动
-    鼠标         转动视角
-    Space / Q   上升 / 下降
-    Shift       加速
-    ESC         锁定/解锁鼠标
-    R           重置相机
+Controls:
+    WASD        Move
+    Mouse       Look around
+    Space / Q   Up / Down
+    Shift       Boost
+    ESC         Lock / unlock mouse
+    R           Reset camera
 """
 
-import os
 import math
 import numpy as np
 from ursina import *
-
-# ====================================================
-# ========== 0. 中文字体设置 =========================
-# ====================================================
-def setup_chinese_font():
-    font_path = 'simhei.ttf'
-    if os.path.exists(font_path):
-        Text.default_font = font_path
-        print(f'[字体] 已加载中文字体: {font_path}')
-        return True
-    else:
-        print('[字体] 未找到 simhei.ttf，请将其复制到项目文件夹')
-        print('       字体文件位于 C:\\Windows\\Fonts\\simhei.ttf')
-        return False
-
-setup_chinese_font()
 
 # ====================================================
 # ========== 1. 神经参数 =============================
@@ -66,7 +49,7 @@ W[mask] = np.random.uniform(0.5, 2.0, mask.sum())
 W[:, ~is_excitatory] *= -1
 W = W * (5.0 / np.max(np.abs(W)))
 
-print(f"[连接组] 已生成 {mask.sum()} 个突触")
+print(f"[connectome] generated {mask.sum()} synapses")
 
 sensory_left  = list(range(20, 30))
 sensory_right = list(range(30, 40))
@@ -118,18 +101,18 @@ SPRING_K     = 12.0
 DAMPING_C    = 10.0
 
 # ---- 身体行波（横向背腹波）----
-WAVE_AMP_BODY   = 0.045   # 横向偏移幅度（世界单位）
-WAVE_FREQ_BODY  = 0.55    # 空间频率（每段相位差）
-WAVE_BASE_SPEED = 6.0     # 基础时间频率（弧度/秒），会与速度耦合
-WAVE_SPEED_GAIN = 0.6     # 速度越快，频率越高
-WAVE_DECAY_BODY = 0.92    # 沿身体的衰减（比之前缓，让波能传到中段）
+WAVE_AMP_BODY   = 0.045
+WAVE_FREQ_BODY  = 0.55
+WAVE_BASE_SPEED = 6.0
+WAVE_SPEED_GAIN = 0.6
+WAVE_DECAY_BODY = 0.92
 
-# ---- 头部摆动（head swing）----
-HEAD_SWING_AMP   = 0.10   # 弧度
-HEAD_SWING_FREQ  = 1.1    # Hz 量级（弧度/秒 = 2π*f）
+# ---- 头部摆动 ----
+HEAD_SWING_AMP   = 0.10
+HEAD_SWING_FREQ  = 1.1
 
-# ---- 转角惯性（一阶低通）----
-TURN_TAU   = 0.18         # 转角平滑时间常数（秒）
+# ---- 转角惯性 ----
+TURN_TAU   = 0.18
 turn_smoothed = 0.0
 
 # ---- 趋化 ----
@@ -141,7 +124,7 @@ DT_MAX       = 0.033
 # ====================================================
 # ========== 6. Ursina 场景 ==========================
 # ====================================================
-app = Ursina(title='秀丽隐杆线虫虚拟环境')
+app = Ursina(title='C. elegans Virtual Environment')
 
 DirectionalLight(y=8, z=-5, rotation=(50, -30, 0))
 AmbientLight(color=color.rgba(120, 120, 140, 255))
@@ -200,7 +183,7 @@ seg_positions  = [Vec3(-i * SPACING, 0.1, 0) for i in range(N_SEGMENTS)]
 seg_velocities = [Vec3(0, 0, 0) for _ in range(N_SEGMENTS)]
 
 first_frame = True
-wave_phase  = 0.0   # 行波时间相位（与速度耦合）
+wave_phase  = 0.0
 
 # ====================================================
 # ========== 9. 自由相机 =============================
@@ -224,7 +207,7 @@ mouse.locked = True
 info_text = Text(text='', position=(-0.85, 0.45), scale=1.0,
                  color=color.white, background=True)
 help_text = Text(
-    text='WASD 移动 | 鼠标 视角 | 空格/Q 升降 | Shift 加速 | ESC 解锁鼠标 | R 重置相机',
+    text='WASD move | Mouse look | Space/Q up-down | Shift boost | ESC unlock mouse | R reset camera',
     position=(-0.85, -0.47), scale=0.85,
     color=color.rgb(0.85, 0.85, 0.95), background=True)
 
@@ -336,18 +319,15 @@ def update():
     lft_count = sum(1 for i in left_neurons    if recent_spikes[i] > 0)
     rgt_count = sum(1 for i in right_neurons   if recent_spikes[i] > 0)
 
-    # 原始转角
     raw_turn = (lft_count - rgt_count) * 0.15
     if grad < 0.02:
         raw_turn += (np.random.rand() - 0.5) * 0.30
     else:
         raw_turn += (np.random.rand() - 0.5) * 0.05
 
-    # 一阶低通：转角有惯性，不再瞬间甩头
     alpha = 1.0 - math.exp(-dt / TURN_TAU)
     turn_smoothed += (raw_turn - turn_smoothed) * alpha
 
-    # 头部摆动（head swing）：前进时头部左右小幅摆动
     head_swing = HEAD_SWING_AMP * math.sin(wave_phase * 0.5)
 
     head_angle += (turn_smoothed * 0.12 + head_swing * 0.04)
@@ -361,10 +341,9 @@ def update():
     head_pos.x += forward_x * speed * dt
     head_pos.z += forward_z * speed * dt
 
-    # ---------- 边界：轻推 + 转向 ----------
+    # ---------- 边界 ----------
     r = math.sqrt(head_pos.x ** 2 + head_pos.z ** 2)
     if r > WORLD_RADIUS - 0.8:
-        # 软推回，不完全夹死
         push = (r - (WORLD_RADIUS - 0.8)) * 0.6
         head_pos.x -= (head_pos.x / r) * push
         head_pos.z -= (head_pos.z / r) * push
@@ -372,7 +351,7 @@ def update():
         diff = normalize_angle(to_center - head_angle)
         head_angle = normalize_angle(head_angle + diff * 0.12)
 
-    # ---------- 行波相位：与速度耦合 ----------
+    # ---------- 行波相位 ----------
     wave_freq = WAVE_BASE_SPEED + WAVE_SPEED_GAIN * speed
     wave_phase += wave_freq * dt
 
@@ -389,7 +368,6 @@ def update():
             )
         first_frame = False
     else:
-        # 前进方向的垂直向量（用于背腹侧横向摆动）
         perp_x = -forward_z
         perp_z =  forward_x
 
@@ -397,7 +375,6 @@ def update():
             prev = seg_positions[i - 1]
             curr = seg_positions[i]
 
-            # 沿身体方向的单位向量（由前两段决定）
             if i == 1:
                 body_dir = Vec3(-forward_x, 0, -forward_z)
             else:
@@ -407,14 +384,11 @@ def update():
                 else:
                     body_dir = Vec3(-forward_x, 0, -forward_z)
 
-            # 距离约束：在 prev 后方 SPACING
             target_dist = prev + body_dir * SPACING
 
-            # 横向背腹波：垂直于身体方向的偏移
             wave_amp_i = WAVE_AMP_BODY * (WAVE_DECAY_BODY ** (i - 1))
             wave_off = wave_amp_i * math.sin(wave_phase - i * WAVE_FREQ_BODY)
 
-            # 角度约束（保留一点点，让身体能跟随头部方向）
             target_dir = Vec3(
                 body_dir.x + perp_x * wave_off,
                 0,
@@ -424,7 +398,6 @@ def update():
                 target_dir = target_dir.normalized()
             target_angle = prev + target_dir * SPACING
 
-            # 距离权重大，角度权重小
             target = target_dist * 0.85 + target_angle * 0.15
 
             to_target = target - curr
@@ -432,7 +405,6 @@ def update():
             seg_velocities[i] += force * dt
             seg_positions[i] = curr + seg_velocities[i] * dt
 
-    # 边界约束身体段（软夹）
     for i in range(1, N_SEGMENTS):
         p = seg_positions[i]
         rr = math.sqrt(p.x ** 2 + p.z ** 2)
@@ -444,7 +416,6 @@ def update():
     for i in range(N_SEGMENTS):
         seg = worm_segments[i]
         pos = seg_positions[i]
-        # 身体随行波轻微上下起伏，相位与横向波一致
         y = 0.1 + 0.015 * math.sin(wave_phase - i * WAVE_FREQ_BODY)
         seg.position = Vec3(pos.x, y, pos.z)
 
@@ -475,14 +446,14 @@ def update():
     active_recent = int(recent_spikes.sum())
     active_last   = int(last_spikes.sum())
     info_text.text = (
-        f'秀丽隐杆线虫 虚拟环境\n'
-        f'得分: {score}\n'
-        f'活跃神经元数(3步累计): {active_recent}\n'
-        f'瞬时放电(最后一步): {active_last}\n'
-        f'前进/左转/右转: {fwd_count}/{lft_count}/{rgt_count}\n'
-        f'左/右浓度: {c_left:.3f} / {c_right:.3f}  (梯度 {grad:+.3f})\n'
-        f'平均膜电位: {V.mean():.2f} 毫伏\n'
-        f'相机位置: ({camera.x:.1f}, {camera.y:.1f}, {camera.z:.1f})'
+        f'C. elegans Virtual Environment\n'
+        f'Score: {score}\n'
+        f'Active neurons (3 steps): {active_recent}\n'
+        f'Instant spikes (last step): {active_last}\n'
+        f'Forward / Left / Right: {fwd_count}/{lft_count}/{rgt_count}\n'
+        f'Left / Right conc: {c_left:.3f} / {c_right:.3f}  (grad {grad:+.3f})\n'
+        f'Mean membrane potential: {V.mean():.2f} mV\n'
+        f'Camera: ({camera.x:.1f}, {camera.y:.1f}, {camera.z:.1f})'
     )
 
 app.run()
